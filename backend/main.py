@@ -1,0 +1,31 @@
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from database import Base, engine
+from routers import auth, projects, tasks, comments, tags, websocket, attachments, dashboard
+
+Base.metadata.create_all(bind=engine)
+
+app = FastAPI(title="Task Collab API", version="1.0.0")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Include routers
+app.include_router(auth.router)
+app.include_router(projects.router)
+app.include_router(tasks.router)
+app.include_router(comments.router)
+app.include_router(tags.router)
+app.include_router(websocket.router)
+app.include_router(attachments.router)
+app.include_router(dashboard.router)
+
+
+@app.get("/api/health")
+def health_check():
+    return {"status": "ok", "message": "Task Collab API is running"}
