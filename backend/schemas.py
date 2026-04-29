@@ -131,6 +131,15 @@ class TaskOut(BaseModel):
     def none_to_list(cls, v):
         return [] if v is None else v
 
+    @field_validator("severity", "status", "priority", mode="before")
+    @classmethod
+    def enum_to_str(cls, v):
+        if v is None:
+            return "medium"
+        if hasattr(v, "value"):
+            return v.value
+        return str(v)
+
 
 # --- Comment ---
 class CommentCreate(BaseModel):

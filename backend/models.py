@@ -80,7 +80,7 @@ class Task(Base):
     reproduction_steps = Column(Text, default="")
     environment = Column(String(255), default="")  # e.g., "Chrome 120 / Windows 11 / v2.3.1"
     severity = Column(Enum(TaskPriority), default=TaskPriority.medium, nullable=False)
-    related_bug_ids = Column(JSON, default=list)  # list of related task IDs
+    related_bug_ids = Column(JSON, default=lambda: [])  # list of related task IDs
     commit_hash = Column(String(40), default="")  # Git commit hash that introduced/fixes the bug
     # Standard fields
     status = Column(Enum(TaskStatus), default=TaskStatus.todo, nullable=False)

@@ -127,7 +127,7 @@ export const useProjectStore = defineStore('project', () => {
   }
 
   async function linkBugs(taskId, targetId) {
-    return await api.post(`/tasks/${taskId}/link`, { target_id: targetId })
+    return await api.post(`/tasks/${taskId}/link`, { target_id: Number(targetId) })
   }
 
   async function unlinkBugs(taskId, targetId) {
@@ -143,5 +143,6 @@ export const useProjectStore = defineStore('project', () => {
     uploadAttachment, fetchAttachments, deleteAttachment,
     fetchDashboard, fetchAuditLogs,
     fetchNotifications, fetchUnreadCount, markNotificationRead, markAllNotificationsRead,
+    fetchRelatedBugs, linkBugs, unlinkBugs,
   }
 })

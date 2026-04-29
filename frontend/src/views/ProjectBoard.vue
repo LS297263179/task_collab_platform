@@ -175,9 +175,12 @@
         <div style="margin: 16px 0">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px">
             <strong>关联 Bug：</strong>
-            <el-select v-model="linkTargetId" placeholder="搜索关联 Bug" style="width: 200px" clearable filterable size="small" @change="handleLinkBug">
+          <div style="display: flex; align-items: center; gap: 8px">
+            <el-select v-model="linkTargetId" placeholder="搜索关联 Bug" style="width: 180px" clearable filterable size="small">
               <el-option v-for="t in availableLinkTargets" :key="t.id" :label="`#${t.id} ${t.title}`" :value="t.id" />
             </el-select>
+            <el-button size="small" type="primary" @click="handleLinkBug">关联</el-button>
+          </div>
           </div>
           <div v-if="relatedBugs.length" style="display: flex; flex-wrap: wrap; gap: 8px">
             <el-tag v-for="rb in relatedBugs" :key="rb.id" closable @close="handleUnlinkBug(rb.id)"
@@ -430,6 +433,7 @@ async function handleRemoveTag(tagId) {
   }
 }
 
+const selectedTagId = ref(null)
 const relatedBugs = ref([])
 const linkTargetId = ref(null)
 const availableLinkTargets = ref([])
@@ -441,18 +445,19 @@ async function loadRelatedBugs(taskId) {
     relatedBugs.value = []
   }
   // Available targets: all bugs in same project except current
-  availableLinkTargets.value = tasks.value.filter(t => t.id !== taskId)
+  availableLinkTargets.value = tasks.value.filter(t => t.id !== taskId && t.project_id === Number(route.params.id))
 }
 
-async function handleLinkBug(targetId) {
-  if (!targetId || !selectedTask.value) return
+async function handleLinkBug() {
+  if (!linkTargetId.value || !selectedTask.value) return
   try {
-    await store.linkBugs(selectedTask.value.id, targetId)
+    await store.linkBugs(selectedTask.value.id, linkTargetId.value)
     ElMessage.success('关联成功')
     await loadRelatedBugs(selectedTask.value.id)
     linkTargetId.value = null
   } catch (e) {
-    ElMessage.error(e.detail || '关联失败')
+    const msg = e.detail || e.message || '关联失败'
+    ElMessage.error(msg)
   }
 }
 

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 from database import get_db
 from schemas import TaskCreate, TaskUpdate, TaskOut
 from crud import (
@@ -7,7 +8,7 @@ from crud import (
     create_notification,
 )
 from dependencies import get_current_user
-from models import User
+from models import User, Task
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
@@ -72,8 +73,11 @@ def delete(task_id: int, db: Session = Depends(get_db), current_user: User = Dep
 def link_bug(task_id: int, data: dict, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     """Link two bugs together (bidirectional)."""
     target_id = data.get("target_id")
-    if not target_id or target_id == task_id:
+    import logging
+    logging.warning(f"Link bug: task_id={task_id}, target_id={target_id}, type={type(target_id)}")
+    if target_id is None or int(target_id) == task_id:
         raise HTTPException(status_code=400, detail="Invalid target")
+    target_id = int(target_id)
     task = get_task(db, task_id)
     target = get_task(db, target_id)
     if not task or not target:
@@ -81,10 +85,12 @@ def link_bug(task_id: int, data: dict, db: Session = Depends(get_db), current_us
     if task.project_id != target.project_id:
         raise HTTPException(status_code=400, detail="Bugs must be in the same project")
     # Bidirectional linking
-    if target_id not in (task.related_bug_ids or []):
-        task.related_bug_ids = list(set((task.related_bug_ids or []) + [target_id]))
-    if task_id not in (target.related_bug_ids or []):
-        target.related_bug_ids = list(set((target.related_bug_ids or []) + [task_id]))
+    task_ids = list(set((task.related_bug_ids or []) + [target_id]))
+    task.related_bug_ids = task_ids
+    flag_modified(task, "related_bug_ids")
+    target_ids = list(set((target.related_bug_ids or []) + [task_id]))
+    target.related_bug_ids = target_ids
+    flag_modified(target, "related_bug_ids")
     db.commit()
     create_audit_log(db, current_user.id, "update", "task", task_id, {"linked_to": target_id})
     return {"message": "Bugs linked"}
@@ -99,8 +105,10 @@ def unlink_bug(task_id: int, target_id: int, db: Session = Depends(get_db), curr
         raise HTTPException(status_code=404, detail="Task not found")
     if task.related_bug_ids and target_id in task.related_bug_ids:
         task.related_bug_ids.remove(target_id)
+        flag_modified(task, "related_bug_ids")
     if target.related_bug_ids and task_id in target.related_bug_ids:
         target.related_bug_ids.remove(task_id)
+        flag_modified(target, "related_bug_ids")
     db.commit()
     return {"message": "Bugs unlinked"}
 
