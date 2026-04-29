@@ -32,15 +32,20 @@
       </el-col>
     </el-row>
 
-    <!-- Status & Priority charts -->
+    <!-- Status, Priority & Severity charts -->
     <el-row :gutter="16" style="margin-bottom: 24px">
-      <el-col :span="12">
-        <el-card header="任务状态分布">
+      <el-col :span="8">
+        <el-card header="Bug 状态分布">
           <div ref="statusChartRef" style="height: 300px"></div>
         </el-card>
       </el-col>
-      <el-col :span="12">
-        <el-card header="任务优先级分布">
+      <el-col :span="8">
+        <el-card header="严重程度分布">
+          <div ref="severityChartRef" style="height: 300px"></div>
+        </el-card>
+      </el-col>
+      <el-col :span="8">
+        <el-card header="优先级分布">
           <div ref="priorityChartRef" style="height: 300px"></div>
         </el-card>
       </el-col>
@@ -79,6 +84,7 @@ const store = useProjectStore()
 const loading = ref(false)
 const dashboard = ref(null)
 const statusChartRef = ref(null)
+const severityChartRef = ref(null)
 const priorityChartRef = ref(null)
 
 async function loadData() {
@@ -134,6 +140,28 @@ function renderCharts() {
           value: (stats.by_priority || {})[k] || 0,
           itemStyle: { color: priorityColors[k] }
         })),
+      }],
+    })
+  }
+
+  // Severity radar chart
+  if (severityChartRef.value) {
+    const chart = echarts.init(severityChartRef.value)
+    const sevLabels = { low: 'P4-低', medium: 'P3-中', high: 'P2-高', urgent: 'P1-紧急' }
+    const sevColors = { low: '#909399', medium: '#409EFF', high: '#E6A23C', urgent: '#F56C6C' }
+    const keys = ['urgent', 'high', 'medium', 'low']
+    const data = keys.map(k => ({
+      name: sevLabels[k] || k,
+      value: (stats.by_severity || {})[k] || 0,
+      itemStyle: { color: sevColors[k] }
+    }))
+    chart.setOption({
+      tooltip: { trigger: 'item' },
+      series: [{
+        type: 'pie', radius: ['40%', '70%'],
+        roseType: 'radius',
+        label: { show: true, formatter: '{b}: {c}' },
+        data,
       }],
     })
   }

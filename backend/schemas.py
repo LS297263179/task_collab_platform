@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
 
 
 # --- User ---
@@ -111,15 +111,25 @@ class TaskOut(BaseModel):
     assignee_id: Optional[int] = None
     creator_id: int
     due_date: Optional[datetime] = None
-    reproduction_steps: str = ""
-    environment: str = ""
-    related_bug_ids: list[int] = []
-    commit_hash: str = ""
+    reproduction_steps: Optional[str] = ""
+    environment: Optional[str] = ""
+    related_bug_ids: Optional[list[int]] = []
+    commit_hash: Optional[str] = ""
     created_at: datetime
     updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
+
+    @field_validator("reproduction_steps", "environment", "commit_hash", mode="before")
+    @classmethod
+    def none_to_empty(cls, v):
+        return "" if v is None else v
+
+    @field_validator("related_bug_ids", mode="before")
+    @classmethod
+    def none_to_list(cls, v):
+        return [] if v is None else v
 
 
 # --- Comment ---

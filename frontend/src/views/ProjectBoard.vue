@@ -60,9 +60,9 @@
               <!-- Tags -->
               <div v-if="getTaskTags(task.id).length" class="task-tags">
                 <span v-for="tag in getTaskTags(task.id)" :key="tag.id"
-                      class="task-tag-dot"
+                      class="task-tag-badge"
                       :style="{ background: tag.color }"
-                      :title="tag.name" />
+                      :title="tag.name">{{ tag.name }}</span>
               </div>
               <div style="display: flex; justify-content: space-between; margin-bottom: 8px">
                 <el-tag :type="priorityType(task.priority)" size="small">{{ priorityLabel(task.priority) }}</el-tag>
@@ -166,7 +166,26 @@
 
         <!-- Commit hash -->
         <div v-if="selectedTask.commit_hash" style="margin: 16px 0">
-          <strong>Commit：</strong> <el-tag size="small" type="warning">{{ selectedTask.commit_hash }}</el-tag>
+          <strong>Commit：</strong>
+          <el-link :href="`https://github.com/LS297263179/task_collab_platform/commit/${selectedTask.commit_hash}`"
+                   target="_blank" type="warning">{{ selectedTask.commit_hash.slice(0, 7) }}</el-link>
+        </div>
+
+        <!-- Related bugs -->
+        <div style="margin: 16px 0">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px">
+            <strong>关联 Bug：</strong>
+            <el-select v-model="linkTargetId" placeholder="搜索关联 Bug" style="width: 200px" clearable filterable size="small" @change="handleLinkBug">
+              <el-option v-for="t in availableLinkTargets" :key="t.id" :label="`#${t.id} ${t.title}`" :value="t.id" />
+            </el-select>
+          </div>
+          <div v-if="relatedBugs.length" style="display: flex; flex-wrap: wrap; gap: 8px">
+            <el-tag v-for="rb in relatedBugs" :key="rb.id" closable @close="handleUnlinkBug(rb.id)"
+                    :type="statusTagType(rb.status)" size="small" style="cursor: default">
+              #{{ rb.id }} {{ rb.title }} ({{ statusLabel(rb.status) }})
+            </el-tag>
+          </div>
+          <span v-else style="color: #999; font-size: 13px">暂无关联 Bug</span>
         </div>
 
         <!-- Tags section -->
@@ -259,15 +278,22 @@
     </el-dialog>
 
     <!-- Audit Log Dialog -->
-    <el-dialog v-model="showAuditDialog" title="审计日志" width="600px">
+    <el-dialog v-model="showAuditDialog" title="审计日志" width="650px">
       <el-timeline>
         <el-timeline-item v-for="log in auditLogs" :key="log.id" :timestamp="log.created_at" placement="top">
-          <el-card>
+          <el-card :shadow="isImportantChange(log.changes) ? 'always' : 'hover'"
+                   :style="isImportantChange(log.changes) ? { border: '1px solid #f56c6c' } : {}">
             <p><strong>{{ log.user?.username || '未知' }}</strong>
               <el-tag :type="auditActionType(log.action)" size="small" style="margin: 0 8px">{{ auditActionLabel(log.action) }}</el-tag>
               {{ log.entity_type }} #{{ log.entity_id }}
             </p>
-            <pre v-if="log.changes" style="margin: 4px 0 0; font-size: 12px; color: #666; white-space: pre-wrap">{{ JSON.stringify(log.changes, null, 2) }}</pre>
+            <div v-if="log.changes" style="margin-top: 6px">
+              <span v-for="(val, key) in log.changes" :key="key"
+                    :style="isCriticalField(key) ? { color: '#f56c6c', fontWeight: 'bold', fontSize: '12px' } : { color: '#666', fontSize: '12px' }"
+                    style="margin-right: 12px">
+                {{ fieldName(key) }}: {{ val }}
+              </span>
+            </div>
           </el-card>
         </el-timeline-item>
       </el-timeline>
@@ -404,7 +430,46 @@ async function handleRemoveTag(tagId) {
   }
 }
 
-const selectedTagId = ref(null)
+const relatedBugs = ref([])
+const linkTargetId = ref(null)
+const availableLinkTargets = ref([])
+
+async function loadRelatedBugs(taskId) {
+  try {
+    relatedBugs.value = await store.fetchRelatedBugs(taskId)
+  } catch {
+    relatedBugs.value = []
+  }
+  // Available targets: all bugs in same project except current
+  availableLinkTargets.value = tasks.value.filter(t => t.id !== taskId)
+}
+
+async function handleLinkBug(targetId) {
+  if (!targetId || !selectedTask.value) return
+  try {
+    await store.linkBugs(selectedTask.value.id, targetId)
+    ElMessage.success('关联成功')
+    await loadRelatedBugs(selectedTask.value.id)
+    linkTargetId.value = null
+  } catch (e) {
+    ElMessage.error(e.detail || '关联失败')
+  }
+}
+
+async function handleUnlinkBug(targetId) {
+  if (!selectedTask.value) return
+  try {
+    await store.unlinkBugs(selectedTask.value.id, targetId)
+    ElMessage.success('已解除关联')
+    await loadRelatedBugs(selectedTask.value.id)
+  } catch (e) {
+    ElMessage.error(e.detail || '解除失败')
+  }
+}
+
+function statusTagType(s) {
+  return { todo: 'info', in_progress: '', review: 'warning', done: 'success' }[s] || 'info'
+}
 
 // Tag creation
 const showTagDialog = ref(false)
@@ -418,6 +483,16 @@ function auditActionType(action) {
 }
 function auditActionLabel(action) {
   return { create: '创建', update: '修改', delete: '删除' }[action] || action
+}
+function isCriticalField(key) {
+  return ['severity', 'priority', 'status', 'assignee_id'].includes(key)
+}
+function isImportantChange(changes) {
+  if (!changes) return false
+  return Object.keys(changes).some(k => isCriticalField(k))
+}
+function fieldName(key) {
+  return { severity: '严重程度', priority: '优先级', status: '状态', assignee_id: '负责人', title: '标题', linked_to: '关联Bug' }[key] || key
 }
 function formatFileSize(bytes) {
   if (bytes < 1024) return bytes + ' B'
@@ -568,6 +643,7 @@ function openTaskDetail(task) {
   showDetailDialog.value = true
   loadComments(task.id)
   loadAttachmentsForTask(task.id)
+  loadRelatedBugs(task.id)
 }
 
 async function saveTask() {
@@ -641,7 +717,15 @@ watch(showAuditDialog, (val) => { if (val) loadAuditLogs() })
 .task-overdue { border-left-color: #f56c6c; background: #fef0f0; }
 .task-overdue:hover { box-shadow: 0 2px 12px rgba(245,108,108,0.2); }
 .task-tags { margin-bottom: 6px; }
-.task-tag-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
+.task-tag-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  color: #fff;
+  margin-right: 4px;
+  line-height: 1.4;
+}
 .drag-ghost { opacity: 0.4; background: #e8e8e8; }
 .task-title { font-weight: 500; font-size: 14px; }
 .task-desc { color: #888; font-size: 12px; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

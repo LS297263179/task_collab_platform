@@ -66,3 +66,52 @@ def delete(task_id: int, db: Session = Depends(get_db), current_user: User = Dep
         raise HTTPException(status_code=404, detail="Task not found")
     create_audit_log(db, current_user.id, "delete", "task", task_id)
     return {"message": "Task deleted"}
+
+
+@router.post("/{task_id}/link")
+def link_bug(task_id: int, data: dict, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Link two bugs together (bidirectional)."""
+    target_id = data.get("target_id")
+    if not target_id or target_id == task_id:
+        raise HTTPException(status_code=400, detail="Invalid target")
+    task = get_task(db, task_id)
+    target = get_task(db, target_id)
+    if not task or not target:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task.project_id != target.project_id:
+        raise HTTPException(status_code=400, detail="Bugs must be in the same project")
+    # Bidirectional linking
+    if target_id not in (task.related_bug_ids or []):
+        task.related_bug_ids = list(set((task.related_bug_ids or []) + [target_id]))
+    if task_id not in (target.related_bug_ids or []):
+        target.related_bug_ids = list(set((target.related_bug_ids or []) + [task_id]))
+    db.commit()
+    create_audit_log(db, current_user.id, "update", "task", task_id, {"linked_to": target_id})
+    return {"message": "Bugs linked"}
+
+
+@router.delete("/{task_id}/link/{target_id}")
+def unlink_bug(task_id: int, target_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Remove link between two bugs."""
+    task = get_task(db, task_id)
+    target = get_task(db, target_id)
+    if not task or not target:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task.related_bug_ids and target_id in task.related_bug_ids:
+        task.related_bug_ids.remove(target_id)
+    if target.related_bug_ids and task_id in target.related_bug_ids:
+        target.related_bug_ids.remove(task_id)
+    db.commit()
+    return {"message": "Bugs unlinked"}
+
+
+@router.get("/{task_id}/related", response_model=list[TaskOut])
+def get_related(task_id: int, db: Session = Depends(get_db)):
+    """Get related bugs for a task."""
+    task = get_task(db, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    related_ids = task.related_bug_ids or []
+    if not related_ids:
+        return []
+    return db.query(Task).filter(Task.id.in_(related_ids)).all()

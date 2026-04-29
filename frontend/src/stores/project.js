@@ -122,6 +122,18 @@ export const useProjectStore = defineStore('project', () => {
     await api.post('/notifications/read-all')
   }
 
+  async function fetchRelatedBugs(taskId) {
+    return await api.get(`/tasks/${taskId}/related`)
+  }
+
+  async function linkBugs(taskId, targetId) {
+    return await api.post(`/tasks/${taskId}/link`, { target_id: targetId })
+  }
+
+  async function unlinkBugs(taskId, targetId) {
+    await api.delete(`/tasks/${taskId}/link/${targetId}`)
+  }
+
   return {
     projects, currentProject,
     fetchProjects, createProject, deleteProject,
