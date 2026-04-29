@@ -29,6 +29,11 @@ export const useProjectStore = defineStore('project', () => {
     return await api.get(`/tasks/project/${projectId}`)
   }
 
+  async function fetchTasksWithFilters(projectId, filters) {
+    const params = new URLSearchParams(filters).toString()
+    return await api.get(`/tasks/project/${projectId}?${params}`)
+  }
+
   async function createTask(data) {
     return await api.post('/tasks', data)
   }
@@ -101,13 +106,30 @@ export const useProjectStore = defineStore('project', () => {
     return await api.get(`/projects/${projectId}/audit?limit=${limit}`)
   }
 
+  async function fetchNotifications() {
+    return await api.get('/notifications')
+  }
+
+  async function fetchUnreadCount() {
+    return await api.get('/notifications/unread')
+  }
+
+  async function markNotificationRead(id) {
+    await api.post(`/notifications/${id}/read`)
+  }
+
+  async function markAllNotificationsRead() {
+    await api.post('/notifications/read-all')
+  }
+
   return {
     projects, currentProject,
     fetchProjects, createProject, deleteProject,
-    fetchProject, fetchTasks, createTask, updateTask, deleteTask,
+    fetchProject, fetchTasks, fetchTasksWithFilters, createTask, updateTask, deleteTask,
     fetchComments, addComment, fetchMembers, addMember, searchUsers,
     fetchTags, createTag, addTagToTask, removeTagFromTask,
     uploadAttachment, fetchAttachments, deleteAttachment,
     fetchDashboard, fetchAuditLogs,
+    fetchNotifications, fetchUnreadCount, markNotificationRead, markAllNotificationsRead,
   }
 })

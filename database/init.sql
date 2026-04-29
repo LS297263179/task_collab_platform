@@ -49,11 +49,16 @@ CREATE TABLE IF NOT EXISTS tasks (
     description TEXT,
     status ENUM('todo', 'in_progress', 'review', 'done') DEFAULT 'todo' NOT NULL,
     priority ENUM('low', 'medium', 'high', 'urgent') DEFAULT 'medium' NOT NULL,
+    severity ENUM('low', 'medium', 'high', 'urgent') DEFAULT 'medium' NOT NULL,
     position INT DEFAULT 0,
     creator_id INT NOT NULL,
     assignee_id INT DEFAULT NULL,
     project_id INT NOT NULL,
     due_date DATETIME DEFAULT NULL,
+    reproduction_steps TEXT,
+    environment VARCHAR(255) DEFAULT '',
+    related_bug_ids JSON DEFAULT NULL,
+    commit_hash VARCHAR(40) DEFAULT '',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (creator_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -122,6 +127,19 @@ CREATE TABLE IF NOT EXISTS attachments (
     FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
     FOREIGN KEY (uploader_id) REFERENCES users(id) ON DELETE CASCADE,
     INDEX idx_task (task_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Notifications table
+CREATE TABLE IF NOT EXISTS notifications (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    message VARCHAR(500) NOT NULL,
+    task_id INT DEFAULT NULL,
+    is_read BOOLEAN DEFAULT FALSE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE SET NULL,
+    INDEX idx_user_read (user_id, is_read)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- Demo user (password: demo123, hashed with bcrypt)

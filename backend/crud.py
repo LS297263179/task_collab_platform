@@ -1,6 +1,6 @@
 from datetime import datetime
 from sqlalchemy.orm import Session, joinedload
-from models import User, Project, ProjectMember, Task, Comment, Tag, TaskTag, AuditLog, Attachment
+from models import User, Project, ProjectMember, Task, Comment, Tag, TaskTag, AuditLog, Attachment, Notification
 from schemas import UserCreate
 from auth import hash_password, verify_password
 
@@ -125,6 +125,9 @@ def create_task(db: Session, **kwargs) -> Task:
     # 处理前端传来的字符串日期
     if isinstance(kwargs.get("due_date"), str):
         kwargs["due_date"] = datetime.fromisoformat(kwargs["due_date"])
+    # Default severity = priority if not specified
+    if "severity" not in kwargs:
+        kwargs["severity"] = kwargs.get("priority", "medium")
     task = Task(**kwargs, position=max_pos)
     db.add(task)
     db.commit()
@@ -242,17 +245,20 @@ def get_project_statistics(db: Session, project_id: int, members: list[ProjectMe
 
     by_status = {}
     by_priority = {}
+    by_severity = {}
     overdue = 0
     completed_this_week = 0
 
     for t in tasks:
-        by_status[t.status.value if hasattr(t.status, 'value') else str(t.status)] = \
-            by_status.get(t.status.value if hasattr(t.status, 'value') else str(t.status), 0) + 1
-        by_priority[t.priority.value if hasattr(t.priority, 'value') else str(t.priority)] = \
-            by_priority.get(t.priority.value if hasattr(t.priority, 'value') else str(t.priority), 0) + 1
-        if t.due_date and t.due_date < now and (t.status.value if hasattr(t.status, 'value') else str(t.status)) != 'done':
+        s = t.status.value if hasattr(t.status, 'value') else str(t.status)
+        p = t.priority.value if hasattr(t.priority, 'value') else str(t.priority)
+        sv = t.severity.value if hasattr(t.severity, 'value') else str(t.severity)
+        by_status[s] = by_status.get(s, 0) + 1
+        by_priority[p] = by_priority.get(p, 0) + 1
+        by_severity[sv] = by_severity.get(sv, 0) + 1
+        if t.due_date and t.due_date < now and s != 'done':
             overdue += 1
-        if (t.status.value if hasattr(t.status, 'value') else str(t.status)) == 'done' and t.updated_at and t.updated_at >= week_ago:
+        if s == 'done' and t.updated_at and t.updated_at >= week_ago:
             completed_this_week += 1
 
     by_assignee = []
@@ -264,6 +270,7 @@ def get_project_statistics(db: Session, project_id: int, members: list[ProjectMe
     return {
         "by_status": by_status,
         "by_priority": by_priority,
+        "by_severity": by_severity,
         "by_assignee": by_assignee,
         "total": len(tasks),
         "overdue": overdue,
@@ -319,3 +326,38 @@ def delete_attachment(db: Session, attachment_id: int, user_id: int) -> bool:
     db.delete(att)
     db.commit()
     return att.filename
+
+
+# --- Notification ---
+def create_notification(db: Session, user_id: int, message: str, task_id: int | None = None):
+    notif = Notification(user_id=user_id, message=message, task_id=task_id)
+    db.add(notif)
+    db.commit()
+
+
+def get_notifications(db: Session, user_id: int, limit: int = 50) -> list[Notification]:
+    return db.query(Notification).filter(
+        Notification.user_id == user_id,
+    ).order_by(Notification.created_at.desc()).limit(limit).all()
+
+
+def get_unread_count(db: Session, user_id: int) -> int:
+    return db.query(Notification).filter(
+        Notification.user_id == user_id, Notification.is_read == False,
+    ).count()
+
+
+def mark_read(db: Session, user_id: int, notification_id: int) -> bool:
+    notif = db.query(Notification).filter(Notification.id == notification_id, Notification.user_id == user_id).first()
+    if not notif:
+        return False
+    notif.is_read = True
+    db.commit()
+    return True
+
+
+def mark_all_read(db: Session, user_id: int):
+    db.query(Notification).filter(
+        Notification.user_id == user_id, Notification.is_read == False,
+    ).update({Notification.is_read: True})
+    db.commit()

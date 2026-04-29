@@ -11,6 +11,27 @@
       </div>
     </div>
 
+    <!-- Search / Filter bar -->
+    <div style="display: flex; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; align-items: center">
+      <el-input v-model="filters.keyword" placeholder="搜索标题/描述..." clearable style="width: 200px" @clear="applyFilters" @keyup.enter="applyFilters" />
+      <el-select v-model="filters.priority" placeholder="优先级" clearable style="width: 100px" @change="applyFilters">
+        <el-option label="低" value="low" />
+        <el-option label="中" value="medium" />
+        <el-option label="高" value="high" />
+        <el-option label="紧急" value="urgent" />
+      </el-select>
+      <el-select v-model="filters.severity" placeholder="严重程度" clearable style="width: 100px" @change="applyFilters">
+        <el-option label="低" value="low" />
+        <el-option label="中" value="medium" />
+        <el-option label="高" value="high" />
+        <el-option label="紧急" value="urgent" />
+      </el-select>
+      <el-select v-model="filters.assignee_id" placeholder="负责人" clearable style="width: 120px" @change="applyFilters">
+        <el-option v-for="m in members" :key="m.user.id" :label="m.user.username" :value="m.user.id" />
+      </el-select>
+      <el-button @click="resetFilters" size="small">重置</el-button>
+    </div>
+
     <!-- Overdue stats -->
     <div v-if="overdueTasks.length" style="margin-bottom: 16px">
       <el-alert :title="`有 ${overdueTasks.length} 个任务已过期`" type="warning" :closable="false" show-icon />
@@ -45,9 +66,7 @@
               </div>
               <div style="display: flex; justify-content: space-between; margin-bottom: 8px">
                 <el-tag :type="priorityType(task.priority)" size="small">{{ priorityLabel(task.priority) }}</el-tag>
-                <el-tag v-if="task.due_date" :type="isOverdue(task) ? 'danger' : 'info'" size="small">
-                  {{ isOverdue(task) ? '逾期 ' : '' }}{{ formatDate(task.due_date) }}
-                </el-tag>
+                <el-tag :type="severityType(task.severity)" size="small" effect="dark">{{ severityLabel(task.severity) }}</el-tag>
               </div>
               <p class="task-title">{{ task.title }}</p>
               <p class="task-desc">{{ task.description?.slice(0, 60) || '' }}</p>
@@ -62,22 +81,45 @@
       </div>
     </div>
 
-    <!-- Create/Edit Task Dialog -->
-    <el-dialog v-model="showTaskDialog" :title="editingTask ? '编辑任务' : '新建任务'" width="500px">
-      <el-form :model="taskForm" label-width="80px">
+    <!-- Create/Edit Bug Dialog -->
+    <el-dialog v-model="showTaskDialog" :title="editingTask ? '编辑 Bug' : '新建 Bug'" width="600px">
+      <el-form :model="taskForm" label-width="90px">
         <el-form-item label="标题">
           <el-input v-model="taskForm.title" />
         </el-form-item>
         <el-form-item label="描述">
           <el-input v-model="taskForm.description" type="textarea" rows="3" />
         </el-form-item>
-        <el-form-item label="优先级">
-          <el-select v-model="taskForm.priority" style="width: 100%">
-            <el-option label="低" value="low" />
-            <el-option label="中" value="medium" />
-            <el-option label="高" value="high" />
-            <el-option label="紧急" value="urgent" />
-          </el-select>
+        <el-form-item label="复现步骤">
+          <el-input v-model="taskForm.reproduction_steps" type="textarea" rows="4" placeholder="1. 打开页面&#10;2. 点击按钮&#10;3. 观察异常" />
+        </el-form-item>
+        <el-row :gutter="12">
+          <el-col :span="12">
+            <el-form-item label="优先级">
+              <el-select v-model="taskForm.priority" style="width: 100%">
+                <el-option label="低" value="low" />
+                <el-option label="中" value="medium" />
+                <el-option label="高" value="high" />
+                <el-option label="紧急" value="urgent" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="严重程度">
+              <el-select v-model="taskForm.severity" style="width: 100%">
+                <el-option label="低" value="low" />
+                <el-option label="中" value="medium" />
+                <el-option label="高" value="high" />
+                <el-option label="紧急" value="urgent" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item label="环境信息">
+          <el-input v-model="taskForm.environment" placeholder="例如: Chrome 120 / Windows 11 / v2.3.1" />
+        </el-form-item>
+        <el-form-item label="关联 Commit">
+          <el-input v-model="taskForm.commit_hash" placeholder="Git commit hash (可选)" />
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="taskForm.status" style="width: 100%">
@@ -99,16 +141,32 @@
       </template>
     </el-dialog>
 
-    <!-- Task Detail Dialog -->
-    <el-dialog v-model="showDetailDialog" title="任务详情" width="600px">
+    <!-- Bug Detail Dialog -->
+    <el-dialog v-model="showDetailDialog" title="Bug 详情" width="650px">
       <div v-if="selectedTask">
         <h3>{{ selectedTask.title }}</h3>
         <p style="color: #666; margin: 8px 0">{{ selectedTask.description || '暂无描述' }}</p>
-        <div style="display: flex; gap: 12px; margin: 16px 0; flex-wrap: wrap">
+        <div style="display: flex; gap: 8px; margin: 16px 0; flex-wrap: wrap">
           <el-tag :type="priorityType(selectedTask.priority)">{{ priorityLabel(selectedTask.priority) }}</el-tag>
+          <el-tag :type="severityType(selectedTask.severity)" effect="dark">{{ severityLabel(selectedTask.severity) }}</el-tag>
           <el-tag>{{ statusLabel(selectedTask.status) }}</el-tag>
-          <span v-if="isOverdue(selectedTask)" style="color: #f56c6c; line-height: 22px">已逾期</span>
           <span style="color: #999; line-height: 22px">负责人: {{ selectedTask.assignee_id ? getUserName(selectedTask.assignee_id) : '未分配' }}</span>
+        </div>
+
+        <!-- Reproduction steps -->
+        <div v-if="selectedTask.reproduction_steps" style="margin: 16px 0">
+          <strong>复现步骤：</strong>
+          <pre style="margin-top: 8px; padding: 12px; background: #f5f7fa; border-radius: 4px; white-space: pre-wrap; font-size: 13px">{{ selectedTask.reproduction_steps }}</pre>
+        </div>
+
+        <!-- Environment -->
+        <div v-if="selectedTask.environment" style="margin: 16px 0">
+          <strong>环境信息：</strong> <el-tag size="small" type="info">{{ selectedTask.environment }}</el-tag>
+        </div>
+
+        <!-- Commit hash -->
+        <div v-if="selectedTask.commit_hash" style="margin: 16px 0">
+          <strong>Commit：</strong> <el-tag size="small" type="warning">{{ selectedTask.commit_hash }}</el-tag>
         </div>
 
         <!-- Tags section -->
@@ -236,6 +294,26 @@ const projectTags = ref([])
 const taskTagMap = ref({})
 const attachments = ref([])
 const auditLogs = ref([])
+
+// Filters
+const filters = reactive({ keyword: '', priority: '', severity: '', assignee_id: '' })
+
+function applyFilters() {
+  const keyword = filters.keyword.toLowerCase()
+  const filtered = tasks.value.filter(t => {
+    if (keyword && !t.title.toLowerCase().includes(keyword) && !t.description.toLowerCase().includes(keyword)) return false
+    if (filters.priority && t.priority !== filters.priority) return false
+    if (filters.severity && t.severity !== filters.severity) return false
+    if (filters.assignee_id && t.assignee_id != filters.assignee_id) return false
+    return true
+  })
+  for (const col of columns) board[col.key] = filtered.filter(t => t.status === col.key)
+}
+
+function resetFilters() {
+  Object.assign(filters, { keyword: '', priority: '', severity: '', assignee_id: '' })
+  syncBoardFromTasks()
+}
 
 const columns = [
   { key: 'todo', label: '待办', color: '#909399' },
@@ -425,8 +503,9 @@ async function onDragEnd(evt, newStatus) {
 const showTaskDialog = ref(false)
 const editingTask = ref(null)
 const taskForm = reactive({
-  title: '', description: '', priority: 'medium', status: 'todo',
+  title: '', description: '', priority: 'medium', severity: 'medium', status: 'todo',
   assignee_id: null, due_date: null, project_id: null,
+  reproduction_steps: '', environment: '', commit_hash: '',
 })
 
 // Detail dialog
@@ -452,6 +531,8 @@ function priorityType(p) {
   return map[p] || ''
 }
 function priorityLabel(p) { return { low: '低', medium: '中', high: '高', urgent: '紧急' }[p] || p }
+function severityType(p) { return { low: 'info', medium: '', high: 'warning', urgent: 'danger' }[p] || '' }
+function severityLabel(p) { return { low: 'P4-低', medium: 'P3-中', high: 'P2-高', urgent: 'P1-紧急' }[p] || p }
 function statusLabel(s) { return { todo: '待办', in_progress: '进行中', review: '审核中', done: '已完成' }[s] || s }
 function formatDate(d) { return d ? new Date(d).toLocaleDateString() : '' }
 
@@ -463,7 +544,7 @@ async function loadProject() {
     tasks.value = await store.fetchTasks(id)
     members.value = await store.fetchMembers(id)
     await loadTaskTags()
-    syncBoardFromTasks()
+    resetFilters()  // Sync board and clear filters
   } catch (e) {
     ElMessage.error('加载失败')
   } finally {
@@ -474,8 +555,9 @@ async function loadProject() {
 function openCreateTask() {
   editingTask.value = null
   Object.assign(taskForm, {
-    title: '', description: '', priority: 'medium', status: 'todo',
+    title: '', description: '', priority: 'medium', severity: 'medium', status: 'todo',
     assignee_id: null, due_date: null, project_id: Number(route.params.id),
+    reproduction_steps: '', environment: '', commit_hash: '',
   })
   showTaskDialog.value = true
 }

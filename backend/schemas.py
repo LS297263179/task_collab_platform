@@ -73,20 +73,30 @@ class TaskCreate(BaseModel):
     title: str
     description: str = ""
     priority: str = "medium"
+    severity: str = "medium"
     status: str = "todo"
     assignee_id: Optional[int] = None
     project_id: int
     due_date: Optional[datetime] = None
+    reproduction_steps: str = ""
+    environment: str = ""
+    related_bug_ids: list[int] = []
+    commit_hash: str = ""
 
 
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     priority: Optional[str] = None
+    severity: Optional[str] = None
     status: Optional[str] = None
     assignee_id: Optional[int] = None
     due_date: Optional[datetime] = None
     position: Optional[int] = None
+    reproduction_steps: Optional[str] = None
+    environment: Optional[str] = None
+    related_bug_ids: Optional[list[int]] = None
+    commit_hash: Optional[str] = None
 
 
 class TaskOut(BaseModel):
@@ -95,11 +105,16 @@ class TaskOut(BaseModel):
     description: str
     status: str
     priority: str
+    severity: str
     position: int
     project_id: int
     assignee_id: Optional[int] = None
     creator_id: int
     due_date: Optional[datetime] = None
+    reproduction_steps: str = ""
+    environment: str = ""
+    related_bug_ids: list[int] = []
+    commit_hash: str = ""
     created_at: datetime
     updated_at: Optional[datetime] = None
 
@@ -190,6 +205,7 @@ class AttachmentOut(BaseModel):
 class TaskStats(BaseModel):
     by_status: dict  # {"todo": 5, "in_progress": 3, ...}
     by_priority: dict  # {"low": 2, "medium": 5, ...}
+    by_severity: dict  # {"low": 2, "medium": 5, "high": 3, "urgent": 1}
     by_assignee: list[dict]  # [{user_id, username, count}]
     total: int
     overdue: int
@@ -210,3 +226,20 @@ class MemberWorkload(BaseModel):
 class ProjectDashboard(BaseModel):
     task_stats: TaskStats
     member_workloads: list[MemberWorkload]
+
+
+# --- Notification ---
+class NotificationOut(BaseModel):
+    id: int
+    user_id: int
+    message: str
+    task_id: Optional[int] = None
+    is_read: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class NotificationCount(BaseModel):
+    unread_count: int

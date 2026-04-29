@@ -76,6 +76,13 @@ class Task(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(200), nullable=False)
     description = Column(Text, default="")
+    # Bug-specific fields
+    reproduction_steps = Column(Text, default="")
+    environment = Column(String(255), default="")  # e.g., "Chrome 120 / Windows 11 / v2.3.1"
+    severity = Column(Enum(TaskPriority), default=TaskPriority.medium, nullable=False)
+    related_bug_ids = Column(JSON, default=list)  # list of related task IDs
+    commit_hash = Column(String(40), default="")  # Git commit hash that introduced/fixes the bug
+    # Standard fields
     status = Column(Enum(TaskStatus), default=TaskStatus.todo, nullable=False)
     priority = Column(Enum(TaskPriority), default=TaskPriority.medium, nullable=False)
     position = Column(Integer, default=0)
@@ -91,6 +98,23 @@ class Task(Base):
     project = relationship("Project", back_populates="tasks")
     comments = relationship("Comment", back_populates="task", cascade="all, delete-orphan")
     tags = relationship("TaskTag", back_populates="task", cascade="all, delete-orphan")
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+    __table_args__ = (
+        Index("ix_notifications_user_read", "user_id", "is_read"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    message = Column(String(500), nullable=False)
+    task_id = Column(Integer, ForeignKey("tasks.id"), nullable=True)
+    is_read = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    user = relationship("User")
+    task = relationship("Task")
 
 
 class Comment(Base):
